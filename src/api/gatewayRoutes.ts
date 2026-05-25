@@ -1,5 +1,6 @@
 import { Router, Request, Response } from 'express';
 import gatewayManager from '../core/GatewayManager';
+import { licenseManager } from '../core/LicenseManager';
 
 const router = Router();
 
@@ -22,6 +23,10 @@ router.get('/tunnels', (_req: Request, res: Response) => {
 // POST /api/gateways — Create gateway
 router.post('/', (req: Request, res: Response) => {
   try {
+    const check = licenseManager.canUseGateway();
+    if (!check.allowed) {
+      return res.status(403).json({ success: false, message: check.message, upgrade: true });
+    }
     const gw = gatewayManager.createGateway(req.body);
     res.json({ data: { ...gw, password: '••••••' } });
   } catch (err: any) {

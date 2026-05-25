@@ -8,6 +8,7 @@ import setupRoutes from './api/setupRoutes';
 import dataRoutes from './api/dataRoutes';
 import bulkImportRoutes from './api/bulkImportRoutes';
 import gatewayRoutes from './api/gatewayRoutes';
+import licenseRoutes from './api/licenseRoutes';
 import { setupWebSocket } from './websocket/realtimeHandler';
 import path from 'path';
 
@@ -27,6 +28,7 @@ app.use('/api/tags', tagRoutes);
 app.use('/api/gateways', gatewayRoutes);
 app.use('/api/setup', setupRoutes);
 app.use('/api/data', dataRoutes);
+app.use('/api/license', licenseRoutes);
 
 // Health check
 app.get('/api/health', (_req, res) => {

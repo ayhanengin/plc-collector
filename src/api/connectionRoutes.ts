@@ -3,6 +3,7 @@ import { connections } from '../config/configDb';
 import { connectionManager } from '../core/ConnectionManager';
 import { poller } from '../core/Poller';
 import { DriverFactory } from '../drivers/DriverFactory';
+import { licenseManager } from '../core/LicenseManager';
 
 const router = Router();
 
@@ -40,6 +41,11 @@ router.get('/:id', (req: Request, res: Response) => {
 // POST / — Create new connection
 router.post('/', (req: Request, res: Response) => {
   try {
+    // License check
+    const check = licenseManager.canCreateConnection();
+    if (!check.allowed) {
+      return res.status(403).json({ success: false, message: check.message, upgrade: true });
+    }
     const conn = connections.create(req.body);
     console.log(`🔌 Connection "${conn.name}" created`);
     res.status(201).json({ data: conn });

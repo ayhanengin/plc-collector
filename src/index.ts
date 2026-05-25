@@ -7,6 +7,7 @@ import { initDataAdapter, getDataAdapter } from './adapters/AdapterFactory';
 import { connectionManager } from './core/ConnectionManager';
 import { poller } from './core/Poller';
 import gatewayManager from './core/GatewayManager';
+import { licenseManager } from './core/LicenseManager';
 
 const PORT = parseInt(process.env.PORT || '4000');
 
@@ -21,6 +22,10 @@ async function bootstrap() {
 
   // 1. Initialize Config DB (always SQLite, zero-config)
   initConfigDb();
+
+  // 2. Initialize License
+  licenseManager.init();
+  console.log(`🔑 License: ${licenseManager.tier}`);
 
   // 2. Initialize Data Adapter (based on user's choice)
   try {

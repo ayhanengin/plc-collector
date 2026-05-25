@@ -1,0 +1,42 @@
+version: '3.8'
+
+services:
+  plc-collector:
+    build: .
+    container_name: plc-collector
+    restart: unless-stopped
+    ports:
+      - "4000:4000"
+    environment:
+      - PORT=4000
+      - DB_ENGINE=sqlite
+      - NODE_ENV=production
+    volumes:
+      - plc-data:/app/data
+    networks:
+      - plc-network
+
+  # Optional: PostgreSQL for PRO/ENTERPRISE users
+  # Uncomment to use PostgreSQL for data logging
+  # postgres:
+  #   image: timescale/timescaledb:latest-pg16
+  #   container_name: plc-postgres
+  #   restart: unless-stopped
+  #   environment:
+  #     POSTGRES_DB: plc_collector
+  #     POSTGRES_USER: postgres
+  #     POSTGRES_PASSWORD: changeme
+  #   ports:
+  #     - "5432:5432"
+  #   volumes:
+  #     - pg-data:/var/lib/postgresql/data
+  #   networks:
+  #     - plc-network
+
+volumes:
+  plc-data:
+  # pg-data:
+
+networks:
+  plc-network:
+    driver: bridge

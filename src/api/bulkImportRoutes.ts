@@ -1,6 +1,7 @@
 import { Router, Request, Response } from 'express';
 import { tags } from '../config/configDb';
 import { parseTiaPaste } from '../utils/tiaParser';
+import { licenseManager } from '../core/LicenseManager';
 
 const router = Router();
 
@@ -52,6 +53,12 @@ router.post('/', (req: Request, res: Response) => {
       }));
     } else {
       return res.status(400).json({ success: false, message: 'paste_text+db_number veya tags array gerekli' });
+    }
+
+    // License check
+    const tagCheck = licenseManager.canCreateTags(tagsToInsert.length);
+    if (!tagCheck.allowed) {
+      return res.status(403).json({ success: false, message: tagCheck.message, upgrade: true, remaining: tagCheck.remaining });
     }
 
     // Use configDb bulk create (handles deduplication internally)

@@ -1,5 +1,6 @@
 import { Router, Request, Response } from 'express';
 import { tagManager } from '../core/TagManager';
+import { licenseManager } from '../core/LicenseManager';
 
 const router = Router();
 
@@ -40,6 +41,11 @@ router.get('/:id', (req: Request, res: Response) => {
 // POST / — Create new tag
 router.post('/', (req: Request, res: Response) => {
   try {
+    // License check
+    const check = licenseManager.canCreateTags(1);
+    if (!check.allowed) {
+      return res.status(403).json({ success: false, message: check.message, upgrade: true });
+    }
     const tag = tagManager.createTag(req.body);
     console.log(`📊 Tag "${tag.name}" created (${tag.address})`);
     res.status(201).json({ data: tag });
