@@ -13,7 +13,7 @@ async function migrate() {
   console.log('🔄 Migrating PostgreSQL → SQLite config DB...\n');
 
   // Initialize SQLite
-  initConfigDb();
+  await initConfigDb();
 
   // Connect to existing PostgreSQL
   const pool = new Pool({

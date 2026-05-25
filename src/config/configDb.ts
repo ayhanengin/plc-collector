@@ -1,10 +1,10 @@
 /**
  * Config Database — Always SQLite (embedded, zero-config)
+ * Uses sql.js (WASM-based) — NO native compilation needed!
  * Stores: connections, tags, gateways, app_settings
- * No external database dependency needed.
  */
 
-import Database from 'better-sqlite3';
+import initSqlJs, { Database as SqlJsDatabase } from 'sql.js';
 import path from 'path';
 import fs from 'fs';
 
@@ -16,13 +16,158 @@ if (!fs.existsSync(DATA_DIR)) {
   fs.mkdirSync(DATA_DIR, { recursive: true });
 }
 
-const db: import('better-sqlite3').Database = new Database(DB_PATH);
-db.pragma('journal_mode = WAL');
-db.pragma('foreign_keys = ON');
+// ─── sql.js Wrapper (better-sqlite3 compatible API) ────
+
+class SqliteWrapper {
+  private db: SqlJsDatabase | null = null;
+  private _dirty = false;
+  private _saveTimer: ReturnType<typeof setTimeout> | null = null;
+
+  async initialize(): Promise<void> {
+    const SQL = await initSqlJs();
+    
+    if (fs.existsSync(DB_PATH)) {
+      const fileBuffer = fs.readFileSync(DB_PATH);
+      this.db = new SQL.Database(fileBuffer);
+    } else {
+      this.db = new SQL.Database();
+    }
+    // WAL not supported in sql.js (in-memory), but we persist manually
+    this.db.run('PRAGMA foreign_keys = ON');
+  }
+
+  private ensureDb(): SqlJsDatabase {
+    if (!this.db) throw new Error('Database not initialized. Call initConfigDb() first.');
+    return this.db;
+  }
+
+  /** Save database to disk (debounced) */
+  private scheduleSave(): void {
+    this._dirty = true;
+    if (this._saveTimer) return;
+    this._saveTimer = setTimeout(() => {
+      this._saveTimer = null;
+      this.saveToDisk();
+    }, 500);
+  }
+
+  saveToDisk(): void {
+    if (!this._dirty || !this.db) return;
+    const data = this.db.export();
+    const buffer = Buffer.from(data);
+    fs.writeFileSync(DB_PATH, buffer);
+    this._dirty = false;
+  }
+
+  exec(sql: string): void {
+    this.ensureDb().run(sql);
+    this.scheduleSave();
+  }
+
+  prepare(sql: string): PreparedStatement {
+    return new PreparedStatement(this.ensureDb(), sql, () => this.scheduleSave());
+  }
+
+  transaction<T>(fn: (items: any[]) => T): (items: any[]) => T {
+    return (items: any[]) => {
+      const db = this.ensureDb();
+      db.run('BEGIN TRANSACTION');
+      try {
+        const result = fn(items);
+        db.run('COMMIT');
+        this.scheduleSave();
+        return result;
+      } catch (err) {
+        db.run('ROLLBACK');
+        throw err;
+      }
+    };
+  }
+
+  close(): void {
+    this.saveToDisk();
+    if (this.db) {
+      this.db.close();
+      this.db = null;
+    }
+  }
+}
+
+class PreparedStatement {
+  constructor(
+    private db: SqlJsDatabase,
+    private sql: string,
+    private onWrite: () => void,
+  ) {}
+
+  run(...params: any[]): { lastInsertRowid: number; changes: number } {
+    const flatParams = this.flattenParams(params);
+    this.db.run(this.sql, flatParams);
+    this.onWrite();
+    
+    const lastId = (this.db.exec('SELECT last_insert_rowid() as id')[0]?.values[0]?.[0] as number) || 0;
+    const changes = (this.db.exec('SELECT changes() as c')[0]?.values[0]?.[0] as number) || 0;
+    return { lastInsertRowid: lastId, changes };
+  }
+
+  get(...params: any[]): any {
+    const flatParams = this.flattenParams(params);
+    const stmt = this.db.prepare(this.sql);
+    stmt.bind(flatParams);
+    
+    if (stmt.step()) {
+      const columns = stmt.getColumnNames();
+      const values = stmt.get();
+      stmt.free();
+      const row: any = {};
+      columns.forEach((col: string, i: number) => { row[col] = values[i]; });
+      return row;
+    }
+    stmt.free();
+    return undefined;
+  }
+
+  all(...params: any[]): any[] {
+    const flatParams = this.flattenParams(params);
+    const results: any[] = [];
+    const stmt = this.db.prepare(this.sql);
+    stmt.bind(flatParams);
+    
+    while (stmt.step()) {
+      const columns = stmt.getColumnNames();
+      const values = stmt.get();
+      const row: any = {};
+      columns.forEach((col: string, i: number) => { row[col] = values[i]; });
+      results.push(row);
+    }
+    stmt.free();
+    return results;
+  }
+
+  private flattenParams(params: any[]): any[] {
+    if (params.length === 0) return [];
+    if (params.length === 1 && typeof params[0] === 'object' && params[0] !== null && !Array.isArray(params[0])) {
+      // Named params object → convert to positional by parsing SQL
+      const obj = params[0];
+      const namedParams = this.sql.match(/@\w+/g) || [];
+      return namedParams.map(p => {
+        const key = p.slice(1); // remove @
+        return obj[key] ?? null;
+      });
+    }
+    return params.flat();
+  }
+}
+
+// ─── Global Database Instance ──────────────────────────
+
+const db = new SqliteWrapper();
 
 // ─── Schema ────────────────────────────────────────────
 
-export function initConfigDb(): void {
+export async function initConfigDb(): Promise<void> {
+  await db.initialize();
+
   db.exec(`
     CREATE TABLE IF NOT EXISTS app_settings (
       key TEXT PRIMARY KEY,
@@ -78,7 +223,7 @@ export function initConfigDb(): void {
     );
   `);
 
-  console.log('💾 Config database initialized (SQLite)');
+  console.log('💾 Config database initialized (sql.js — zero native deps)');
 }
 
 // ─── Settings ──────────────────────────────────────────
@@ -259,5 +404,10 @@ function boolify(...keys: string[]) {
     return out;
   };
 }
+
+// Save on process exit
+process.on('exit', () => db.close());
+process.on('SIGINT', () => { db.close(); process.exit(0); });
+process.on('SIGTERM', () => { db.close(); process.exit(0); });
 
 export default db;

@@ -20,8 +20,8 @@ async function bootstrap() {
   console.log('╚═══════════════════════════════════════════════════╝');
   console.log('');
 
-  // 1. Initialize Config DB (always SQLite, zero-config)
-  initConfigDb();
+  // 1. Initialize Config DB (sql.js — zero native deps)
+  await initConfigDb();
 
   // 2. Initialize License
   licenseManager.init();
