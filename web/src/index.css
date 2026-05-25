@@ -1,0 +1,77 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');
+
+:root {
+  --color-primary: #1890ff;
+  --color-success: #52c41a;
+  --color-error: #f5222d;
+  --color-warning: #faad14;
+  --sidebar-bg: #001529;
+  --bg-main: #f5f5f5;
+}
+
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+body {
+  font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  background: var(--bg-main);
+}
+
+html {
+  scroll-behavior: smooth;
+}
+
+/* Custom scrollbar */
+::-webkit-scrollbar { width: 6px; height: 6px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: #d9d9d9; border-radius: 3px; }
+::-webkit-scrollbar-thumb:hover { background: #bfbfbf; }
+
+/* Card hover effects */
+.ant-card {
+  transition: box-shadow 0.3s ease, transform 0.2s ease !important;
+}
+.ant-card:hover {
+  box-shadow: 0 4px 16px rgba(0,0,0,0.08) !important;
+}
+
+/* Pulse animation for status dots */
+@keyframes pulse {
+  0% { box-shadow: 0 0 0 0 rgba(82, 196, 26, 0.7); }
+  70% { box-shadow: 0 0 0 6px rgba(82, 196, 26, 0); }
+  100% { box-shadow: 0 0 0 0 rgba(82, 196, 26, 0); }
+}
+
+.ant-badge-status-success .ant-badge-status-dot {
+  animation: pulse 2s infinite;
+}
+
+/* Table styling */
+.ant-table {
+  border-radius: 12px !important;
+  overflow: hidden;
+}
+
+/* Sidebar menu styling */
+.ant-menu-dark .ant-menu-item-selected {
+  border-radius: 8px !important;
+  margin: 4px 8px !important;
+}
+
+/* Smooth value transitions */
+.ant-statistic-content-value {
+  transition: all 0.3s ease;
+}
+
+/* Remove Vite defaults */
+#root {
+  max-width: 100%;
+  margin: 0;
+  padding: 0;
+  text-align: left;
+}
