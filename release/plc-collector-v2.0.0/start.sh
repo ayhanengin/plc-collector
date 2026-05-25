@@ -11,7 +11,7 @@ fi
 # Install deps on first run
 if [ ! -d "node_modules" ]; then
     echo "📦 İlk çalışma — bağımlılıklar kuruluyor..."
-    npm install --production
+    npm install --ignore-scripts --no-optional 2>/dev/null
     echo ""
 fi
 

@@ -1,13 +1,10 @@
 {
   "name": "plc-collector",
   "version": "2.0.0",
-  "description": "Industrial PLC Data Collector — Multi-protocol PLC communication, real-time monitoring, and multi-DB data logging",
+  "description": "Industrial PLC Data Collector",
   "main": "dist/index.js",
   "scripts": {
-    "dev": "tsx watch src/index.ts",
-    "build": "tsc",
-    "start": "node dist/index.js",
-    "setup": "tsx src/setup.ts"
+    "start": "node dist/index.js"
   },
   "dependencies": {
     "cors": "^2.8.5",
@@ -20,16 +17,13 @@
     "ssh2": "^1.16.0"
   },
   "optionalDependencies": {
-    "pg": "^8.13.1"
+    "pg": "^8.13.1",
+    "serialport": "^13.0.0",
+    "@serialport/bindings-cpp": "^13.0.0"
   },
-  "devDependencies": {
-    "@types/cors": "^2.8.17",
-    "@types/express": "^4.17.21",
-    "@types/node": "^22.10.1",
-    "@types/pg": "^8.11.10",
-    "@types/sql.js": "^1.4.11",
-    "@types/ssh2": "^1.15.0",
-    "tsx": "^4.19.2",
-    "typescript": "^5.7.2"
+  "overrides": {
+    "modbus-serial": {
+      "serialport": "$serialport"
+    }
   }
 }

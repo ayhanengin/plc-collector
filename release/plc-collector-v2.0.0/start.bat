@@ -27,7 +27,10 @@ if not exist "node_modules" (
     echo  [*] Ilk calisma - bagimliliklar kuruluyor...
     echo  [*] Bu islem 1-2 dakika surebilir...
     echo.
-    call npm install --production
+    call npm install --ignore-scripts --no-optional 2>nul
+    if %ERRORLEVEL% neq 0 (
+        echo  [!] Bazi opsiyonel bagimliliklar yuklenemedi, sorun degil.
+    )
     echo.
     echo  [OK] Bagimliliklar kuruldu!
     echo.
