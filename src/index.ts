@@ -26,6 +26,8 @@ async function bootstrap() {
   // 2. Initialize License
   licenseManager.init();
   console.log(`🔑 License: ${licenseManager.tier}`);
+  // Online validation (non-blocking)
+  await licenseManager.validateOnline();
 
   // 2. Initialize Data Adapter (based on user's choice)
   try {

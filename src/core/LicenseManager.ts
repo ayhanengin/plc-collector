@@ -101,13 +101,18 @@ export function validateLicenseKey(key: string): { valid: boolean; tier: License
   return { valid: true, tier: tier as LicenseTier };
 }
 
+const LICENSE_SERVER = process.env.LICENSE_SERVER || 'https://www.dmotomasyon.com/plc-api';
+
 // ─── License Manager ───────────────────────────────────
 
 class LicenseManager {
   private _tier: LicenseTier = 'FREE';
   private _key: string | null = null;
+  private _customer: string | null = null;
+  private _company: string | null = null;
+  private _online: boolean = false;
 
-  /** Initialize from saved settings */
+  /** Initialize from saved settings — tries online first, falls back to offline */
   init(): void {
     const savedKey = settings.get('license_key');
     if (savedKey) {
@@ -120,6 +125,52 @@ class LicenseManager {
     }
     this._tier = 'FREE';
     this._key = null;
+  }
+
+  /** Online validation against dmotomasyon.com */
+  async validateOnline(): Promise<void> {
+    if (!this._key) return;
+
+    try {
+      const os = await import('os');
+      const response = await fetch(`${LICENSE_SERVER}/validate`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          key: this._key,
+          instanceId: settings.get('instance_id') || this._generateInstanceId(),
+          hostname: os.hostname(),
+          version: '2.0.0',
+        }),
+        signal: AbortSignal.timeout(5000),
+      });
+
+      const data = await response.json() as any;
+      if (data.valid) {
+        this._tier = data.tier;
+        this._customer = data.customer;
+        this._company = data.company;
+        this._online = true;
+        console.log(`🔑 Online doğrulama başarılı: ${data.tier} (${data.company || data.customer || ''})`);
+      } else {
+        console.warn(`🔑 Online doğrulama reddedildi: ${data.message}`);
+        // Key was rejected by server — downgrade to FREE
+        this._tier = 'FREE';
+        this._key = null;
+        settings.set('license_key', '');
+        settings.set('license_tier', 'FREE');
+      }
+    } catch (err: any) {
+      // Server unreachable — use offline validation (already done in init)
+      console.warn(`🔑 Online doğrulama yapılamadı (offline mod): ${err.message}`);
+      this._online = false;
+    }
+  }
+
+  private _generateInstanceId(): string {
+    const id = crypto.randomBytes(8).toString('hex');
+    settings.set('instance_id', id);
+    return id;
   }
 
   /** Activate a license key */
