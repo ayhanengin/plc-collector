@@ -3,15 +3,12 @@
  * Automatically creates SSH tunnels through a gateway server
  * to reach PLCs on different subnets.
  * 
- * Flow: PLC Collector → SSH Tunnel → Gateway Server → PLC
- * 
- * User sees: PLC IP: 192.168.27.23, Port: 102
- * System does: SSH to gateway → forward local port → connect through tunnel
+ * v2: Uses configDb (SQLite) instead of pg pool
  */
 
 import { Client as SSHClient } from 'ssh2';
 import net from 'net';
-import pool from '../config/database';
+import { gateways as gwDb } from '../config/configDb';
 
 interface GatewayConfig {
   id: number;
@@ -20,7 +17,7 @@ interface GatewayConfig {
   port: number;
   username: string;
   password: string;
-  subnet_filter: string; // e.g., "192.168.27" — auto-use for IPs matching this
+  subnet_filter: string;
   is_active: boolean;
 }
 
@@ -34,43 +31,18 @@ interface TunnelInfo {
 
 class GatewayManager {
   private tunnels: Map<string, TunnelInfo> = new Map();
-  private gateways: GatewayConfig[] = [];
+  private gatewayCache: GatewayConfig[] = [];
   private nextPort = 20000;
 
   /**
-   * Initialize gateway table in database
+   * Load gateways from configDb
    */
-  async initTable(): Promise<void> {
-    await pool.query(`
-      CREATE TABLE IF NOT EXISTS gateways (
-        id SERIAL PRIMARY KEY,
-        name VARCHAR(100) NOT NULL,
-        host VARCHAR(100) NOT NULL,
-        port INTEGER DEFAULT 22,
-        username VARCHAR(100) NOT NULL,
-        password VARCHAR(200) NOT NULL,
-        subnet_filter VARCHAR(50) DEFAULT '',
-        is_active BOOLEAN DEFAULT true,
-        created_at TIMESTAMP DEFAULT NOW(),
-        updated_at TIMESTAMP DEFAULT NOW()
-      )
-    `);
-    await this.loadGateways();
+  loadGateways(): void {
+    this.gatewayCache = gwDb.getActive();
   }
 
-  /**
-   * Load gateways from DB
-   */
-  async loadGateways(): Promise<void> {
-    const result = await pool.query('SELECT * FROM gateways WHERE is_active = true');
-    this.gateways = result.rows;
-  }
-
-  /**
-   * Find a matching gateway for a target IP
-   */
   findGateway(targetIp: string): GatewayConfig | null {
-    for (const gw of this.gateways) {
+    for (const gw of this.gatewayCache) {
       if (gw.subnet_filter && targetIp.startsWith(gw.subnet_filter)) {
         return gw;
       }
@@ -78,34 +50,23 @@ class GatewayManager {
     return null;
   }
 
-  /**
-   * Check if a target IP needs a gateway tunnel
-   */
   needsTunnel(targetIp: string): boolean {
     return this.findGateway(targetIp) !== null;
   }
 
-  /**
-   * Get or create a tunnel for a target host:port
-   * Returns the local connection details (127.0.0.1:localPort)
-   */
   async getOrCreateTunnel(targetHost: string, targetPort: number): Promise<{ host: string; port: number }> {
     const key = `${targetHost}:${targetPort}`;
     
-    // Return existing tunnel if available
     const existing = this.tunnels.get(key);
     if (existing) {
       return { host: '127.0.0.1', port: existing.localPort };
     }
 
-    // Find gateway
     const gateway = this.findGateway(targetHost);
     if (!gateway) {
-      // No gateway needed, connect directly
       return { host: targetHost, port: targetPort };
     }
 
-    // Create SSH tunnel
     const localPort = this.nextPort++;
     const tunnel = await this.createTunnel(gateway, targetHost, targetPort, localPort);
     this.tunnels.set(key, tunnel);
@@ -114,9 +75,6 @@ class GatewayManager {
     return { host: '127.0.0.1', port: localPort };
   }
 
-  /**
-   * Create an SSH tunnel
-   */
   private createTunnel(
     gateway: GatewayConfig,
     targetHost: string,
@@ -127,7 +85,6 @@ class GatewayManager {
       const sshClient = new SSHClient();
 
       sshClient.on('ready', () => {
-        // Create a local TCP server that forwards to the target through SSH
         const server = net.createServer((socket) => {
           sshClient.forwardOut(
             '127.0.0.1', localPort,
@@ -140,7 +97,6 @@ class GatewayManager {
               }
               socket.pipe(stream);
               stream.pipe(socket);
-              
               stream.on('close', () => socket.destroy());
               socket.on('close', () => stream.destroy());
             }
@@ -183,9 +139,6 @@ class GatewayManager {
     });
   }
 
-  /**
-   * Close a specific tunnel
-   */
   closeTunnel(targetHost: string, targetPort: number): void {
     const key = `${targetHost}:${targetPort}`;
     const tunnel = this.tunnels.get(key);
@@ -196,9 +149,6 @@ class GatewayManager {
     }
   }
 
-  /**
-   * Close all tunnels
-   */
   closeAll(): void {
     for (const [key, tunnel] of this.tunnels) {
       tunnel.sshClient.end();
@@ -207,9 +157,6 @@ class GatewayManager {
     this.tunnels.clear();
   }
 
-  /**
-   * Get all active tunnels info
-   */
   getActiveTunnels(): Array<{ target: string; localPort: number }> {
     return Array.from(this.tunnels.entries()).map(([key, t]) => ({
       target: key,
@@ -217,39 +164,29 @@ class GatewayManager {
     }));
   }
 
-  /**
-   * CRUD operations
-   */
-  async createGateway(data: Partial<GatewayConfig>): Promise<any> {
-    const result = await pool.query(
-      `INSERT INTO gateways (name, host, port, username, password, subnet_filter, is_active) 
-       VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING *`,
-      [data.name, data.host, data.port || 22, data.username, data.password, data.subnet_filter || '', data.is_active !== false]
-    );
-    await this.loadGateways();
-    return result.rows[0];
+  // CRUD — now using configDb
+  createGateway(data: Partial<GatewayConfig>): any {
+    const result = gwDb.create(data);
+    this.loadGateways();
+    return result;
   }
 
-  async updateGateway(id: number, data: Partial<GatewayConfig>): Promise<any> {
-    const result = await pool.query(
-      `UPDATE gateways SET name=$1, host=$2, port=$3, username=$4, password=$5, subnet_filter=$6, is_active=$7, updated_at=NOW() WHERE id=$8 RETURNING *`,
-      [data.name, data.host, data.port || 22, data.username, data.password, data.subnet_filter || '', data.is_active !== false, id]
-    );
-    await this.loadGateways();
-    return result.rows[0];
+  updateGateway(id: number, data: Partial<GatewayConfig>): any {
+    const result = gwDb.update(id, data);
+    this.loadGateways();
+    return result;
   }
 
-  async deleteGateway(id: number): Promise<void> {
-    await pool.query('DELETE FROM gateways WHERE id = $1', [id]);
-    await this.loadGateways();
+  deleteGateway(id: number): void {
+    gwDb.delete(id);
+    this.loadGateways();
   }
 
-  async getAllGateways(): Promise<GatewayConfig[]> {
-    const result = await pool.query('SELECT * FROM gateways ORDER BY id');
-    return result.rows;
+  getAllGateways(): any[] {
+    return gwDb.getAll();
   }
 
-  async testGateway(data: Partial<GatewayConfig>): Promise<boolean> {
+  testGateway(data: Partial<GatewayConfig>): Promise<boolean> {
     return new Promise((resolve) => {
       const client = new SSHClient();
       const timeout = setTimeout(() => {

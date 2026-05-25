@@ -1,5 +1,5 @@
 import { Router, Request, Response } from 'express';
-import pool from '../config/database';
+import { connections } from '../config/configDb';
 import { connectionManager } from '../core/ConnectionManager';
 import { poller } from '../core/Poller';
 import { DriverFactory } from '../drivers/DriverFactory';
@@ -7,14 +7,14 @@ import { DriverFactory } from '../drivers/DriverFactory';
 const router = Router();
 
 // GET / — List all connections with live status
-router.get('/', async (_req: Request, res: Response) => {
+router.get('/', (_req: Request, res: Response) => {
   try {
-    const result = await pool.query('SELECT * FROM plc_connections ORDER BY created_at DESC');
-    const connections = result.rows.map((c) => ({
+    const allConns = connections.getAll();
+    const data = allConns.map((c) => ({
       ...c,
       connected: connectionManager.getStatus(c.id).connected,
     }));
-    res.json({ data: connections });
+    res.json({ data });
   } catch (err: any) {
     res.status(500).json({ success: false, message: err.message });
   }
@@ -26,11 +26,10 @@ router.get('/protocols', (_req: Request, res: Response) => {
 });
 
 // GET /:id — Get single connection
-router.get('/:id', async (req: Request, res: Response) => {
+router.get('/:id', (req: Request, res: Response) => {
   try {
-    const result = await pool.query('SELECT * FROM plc_connections WHERE id = $1', [req.params.id]);
-    if (result.rows.length === 0) return res.status(404).json({ success: false, message: 'Not found' });
-    const conn = result.rows[0];
+    const conn = connections.getById(parseInt(req.params.id));
+    if (!conn) return res.status(404).json({ success: false, message: 'Not found' });
     conn.connected = connectionManager.getStatus(conn.id).connected;
     res.json({ data: conn });
   } catch (err: any) {
@@ -39,30 +38,22 @@ router.get('/:id', async (req: Request, res: Response) => {
 });
 
 // POST / — Create new connection
-router.post('/', async (req: Request, res: Response) => {
+router.post('/', (req: Request, res: Response) => {
   try {
-    const { name, protocol, ip, port, rack, slot, unit_id, auto_connect } = req.body;
-    const result = await pool.query(
-      `INSERT INTO plc_connections (name, protocol, ip, port, rack, slot, unit_id, auto_connect) VALUES ($1,$2,$3,$4,$5,$6,$7,$8) RETURNING *`,
-      [name, protocol, ip, port, rack, slot, unit_id, auto_connect ?? true]
-    );
-    console.log(`🔌 Connection "${name}" created`);
-    res.status(201).json({ data: result.rows[0] });
+    const conn = connections.create(req.body);
+    console.log(`🔌 Connection "${conn.name}" created`);
+    res.status(201).json({ data: conn });
   } catch (err: any) {
     res.status(500).json({ success: false, message: err.message });
   }
 });
 
 // PUT /:id — Update connection
-router.put('/:id', async (req: Request, res: Response) => {
+router.put('/:id', (req: Request, res: Response) => {
   try {
-    const { name, protocol, ip, port, rack, slot, unit_id, auto_connect } = req.body;
-    const result = await pool.query(
-      `UPDATE plc_connections SET name=$1, protocol=$2, ip=$3, port=$4, rack=$5, slot=$6, unit_id=$7, auto_connect=$8, updated_at=NOW() WHERE id=$9 RETURNING *`,
-      [name, protocol, ip, port, rack, slot, unit_id, auto_connect, req.params.id]
-    );
-    if (result.rows.length === 0) return res.status(404).json({ success: false, message: 'Not found' });
-    res.json({ data: result.rows[0] });
+    const conn = connections.update(parseInt(req.params.id), req.body);
+    if (!conn) return res.status(404).json({ success: false, message: 'Not found' });
+    res.json({ data: conn });
   } catch (err: any) {
     res.status(500).json({ success: false, message: err.message });
   }
@@ -74,7 +65,7 @@ router.delete('/:id', async (req: Request, res: Response) => {
     const id = parseInt(req.params.id);
     await connectionManager.disconnect(id);
     poller.stopPolling(id);
-    await pool.query('DELETE FROM plc_connections WHERE id = $1', [id]);
+    connections.delete(id);
     res.json({ success: true });
   } catch (err: any) {
     res.status(500).json({ success: false, message: err.message });

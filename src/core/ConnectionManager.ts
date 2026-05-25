@@ -1,6 +1,6 @@
 import { IPlcDriver, ConnectionConfig } from '../drivers/IPlcDriver';
 import { DriverFactory } from '../drivers/DriverFactory';
-import pool from '../config/database';
+import { connections } from '../config/configDb';
 
 interface ManagedConnection {
   id: number;
@@ -14,11 +14,8 @@ class ConnectionManager {
   private connections: Map<number, ManagedConnection> = new Map();
 
   async connect(connectionId: number): Promise<void> {
-    // Load connection config from database
-    const result = await pool.query('SELECT * FROM plc_connections WHERE id = $1', [connectionId]);
-    if (result.rows.length === 0) throw new Error(`Connection ${connectionId} not found`);
-
-    const row = result.rows[0];
+    const row = connections.getById(connectionId);
+    if (!row) throw new Error(`Connection ${connectionId} not found`);
 
     // Disconnect existing if any
     if (this.connections.has(connectionId)) {

@@ -4,10 +4,9 @@ import gatewayManager from '../core/GatewayManager';
 const router = Router();
 
 // GET /api/gateways — List all gateways
-router.get('/', async (_req: Request, res: Response) => {
+router.get('/', (_req: Request, res: Response) => {
   try {
-    const gateways = await gatewayManager.getAllGateways();
-    // Don't expose passwords in list
+    const gateways = gatewayManager.getAllGateways();
     const safe = gateways.map(g => ({ ...g, password: '••••••' }));
     res.json({ data: safe });
   } catch (err: any) {
@@ -21,9 +20,9 @@ router.get('/tunnels', (_req: Request, res: Response) => {
 });
 
 // POST /api/gateways — Create gateway
-router.post('/', async (req: Request, res: Response) => {
+router.post('/', (req: Request, res: Response) => {
   try {
-    const gw = await gatewayManager.createGateway(req.body);
+    const gw = gatewayManager.createGateway(req.body);
     res.json({ data: { ...gw, password: '••••••' } });
   } catch (err: any) {
     res.status(500).json({ success: false, message: err.message });
@@ -31,9 +30,9 @@ router.post('/', async (req: Request, res: Response) => {
 });
 
 // PUT /api/gateways/:id — Update gateway
-router.put('/:id', async (req: Request, res: Response) => {
+router.put('/:id', (req: Request, res: Response) => {
   try {
-    const gw = await gatewayManager.updateGateway(parseInt(req.params.id), req.body);
+    const gw = gatewayManager.updateGateway(parseInt(req.params.id), req.body);
     res.json({ data: { ...gw, password: '••••••' } });
   } catch (err: any) {
     res.status(500).json({ success: false, message: err.message });
@@ -41,9 +40,9 @@ router.put('/:id', async (req: Request, res: Response) => {
 });
 
 // DELETE /api/gateways/:id — Delete gateway
-router.delete('/:id', async (req: Request, res: Response) => {
+router.delete('/:id', (req: Request, res: Response) => {
   try {
-    await gatewayManager.deleteGateway(parseInt(req.params.id));
+    gatewayManager.deleteGateway(parseInt(req.params.id));
     res.json({ success: true });
   } catch (err: any) {
     res.status(500).json({ success: false, message: err.message });

@@ -1,5 +1,5 @@
-import pool from '../config/database';
 import { connectionManager } from './ConnectionManager';
+import { tags as configTags } from '../config/configDb';
 import { TagValue } from '../drivers/IPlcDriver';
 
 export interface TagDefinition {
@@ -24,52 +24,32 @@ export interface TagDefinition {
 }
 
 class TagManager {
-  async getAllTags(): Promise<TagDefinition[]> {
-    const result = await pool.query(`
-      SELECT t.*, c.name as connection_name, c.protocol, c.ip
-      FROM tag_definitions t
-      LEFT JOIN plc_connections c ON c.id = t.connection_id
-      ORDER BY t.connection_id, t.group_name, t.name
-    `);
-    return result.rows;
+  getAllTags(): TagDefinition[] {
+    return configTags.getAll();
   }
 
-  async getTagsByConnection(connectionId: number): Promise<TagDefinition[]> {
-    const result = await pool.query(
-      `SELECT * FROM tag_definitions WHERE connection_id = $1 ORDER BY group_name, name`,
-      [connectionId]
-    );
-    return result.rows;
+  getTagsByConnection(connectionId: number): TagDefinition[] {
+    return configTags.getByConnectionId(connectionId);
   }
 
-  async getTag(tagId: number): Promise<TagDefinition | null> {
-    const result = await pool.query('SELECT * FROM tag_definitions WHERE id = $1', [tagId]);
-    return result.rows[0] || null;
+  getTag(tagId: number): TagDefinition | null {
+    return configTags.getById(tagId);
   }
 
-  async createTag(tag: Partial<TagDefinition>): Promise<TagDefinition> {
-    const result = await pool.query(
-      `INSERT INTO tag_definitions (connection_id, name, address, data_type, group_name, unit, description, min_value, max_value, polling_interval_ms, log_enabled, log_mode, deadband_value)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13) RETURNING *`,
-      [tag.connection_id, tag.name, tag.address, tag.data_type, tag.group_name, tag.unit, tag.description, tag.min_value, tag.max_value, tag.polling_interval_ms || 1000, tag.log_enabled || false, tag.log_mode || 'polling', tag.deadband_value]
-    );
-    return result.rows[0];
+  createTag(tag: Partial<TagDefinition>): TagDefinition {
+    return configTags.create(tag);
   }
 
-  async updateTag(tagId: number, tag: Partial<TagDefinition>): Promise<TagDefinition> {
-    const result = await pool.query(
-      `UPDATE tag_definitions SET name=$1, address=$2, data_type=$3, group_name=$4, unit=$5, description=$6, min_value=$7, max_value=$8, polling_interval_ms=$9, log_enabled=$10, log_mode=$11, deadband_value=$12, updated_at=NOW() WHERE id=$13 RETURNING *`,
-      [tag.name, tag.address, tag.data_type, tag.group_name, tag.unit, tag.description, tag.min_value, tag.max_value, tag.polling_interval_ms, tag.log_enabled, tag.log_mode, tag.deadband_value, tagId]
-    );
-    return result.rows[0];
+  updateTag(tagId: number, tag: Partial<TagDefinition>): TagDefinition {
+    return configTags.update(tagId, tag);
   }
 
-  async deleteTag(tagId: number): Promise<void> {
-    await pool.query('DELETE FROM tag_definitions WHERE id = $1', [tagId]);
+  deleteTag(tagId: number): void {
+    configTags.delete(tagId);
   }
 
   async readTag(tagId: number): Promise<{ tag: TagDefinition; value: TagValue } | null> {
-    const tag = await this.getTag(tagId);
+    const tag = this.getTag(tagId);
     if (!tag) return null;
 
     const driver = connectionManager.getDriver(tag.connection_id);
@@ -82,7 +62,7 @@ class TagManager {
   }
 
   async readTagsByConnection(connectionId: number): Promise<Record<number, TagValue>> {
-    const tags = await this.getTagsByConnection(connectionId);
+    const tags = this.getTagsByConnection(connectionId);
     if (tags.length === 0) return {};
 
     const driver = connectionManager.getDriver(connectionId);
@@ -95,7 +75,6 @@ class TagManager {
     }
 
     const addresses = tags.map((t) => t.address);
-    // Pass first tag's data_type as hint (batch reads use same type for now)
     const values = await driver.readTags(addresses, tags[0]?.data_type);
 
     const result: Record<number, TagValue> = {};
@@ -105,11 +84,8 @@ class TagManager {
     return result;
   }
 
-  async getGroups(): Promise<string[]> {
-    const result = await pool.query(
-      `SELECT DISTINCT group_name FROM tag_definitions WHERE group_name IS NOT NULL ORDER BY group_name`
-    );
-    return result.rows.map((r) => r.group_name);
+  getGroups(): string[] {
+    return configTags.getGroups();
   }
 }
 

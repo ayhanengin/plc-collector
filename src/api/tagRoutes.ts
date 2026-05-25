@@ -4,12 +4,12 @@ import { tagManager } from '../core/TagManager';
 const router = Router();
 
 // GET / — List all tags
-router.get('/', async (req: Request, res: Response) => {
+router.get('/', (req: Request, res: Response) => {
   try {
-    const connectionId = req.query.connectionId ? parseInt(req.query.connectionId as string) : null;
+    const connectionId = req.query.connectionId ? parseInt(req.query.connectionId as string) : undefined;
     const tags = connectionId
-      ? await tagManager.getTagsByConnection(connectionId)
-      : await tagManager.getAllTags();
+      ? tagManager.getTagsByConnection(connectionId)
+      : tagManager.getAllTags();
     res.json({ data: tags });
   } catch (err: any) {
     res.status(500).json({ success: false, message: err.message });
@@ -17,9 +17,9 @@ router.get('/', async (req: Request, res: Response) => {
 });
 
 // GET /groups — List unique group names
-router.get('/groups', async (_req: Request, res: Response) => {
+router.get('/groups', (_req: Request, res: Response) => {
   try {
-    const groups = await tagManager.getGroups();
+    const groups = tagManager.getGroups();
     res.json({ data: groups });
   } catch (err: any) {
     res.status(500).json({ success: false, message: err.message });
@@ -27,9 +27,9 @@ router.get('/groups', async (_req: Request, res: Response) => {
 });
 
 // GET /:id — Get single tag
-router.get('/:id', async (req: Request, res: Response) => {
+router.get('/:id', (req: Request, res: Response) => {
   try {
-    const tag = await tagManager.getTag(parseInt(req.params.id));
+    const tag = tagManager.getTag(parseInt(req.params.id));
     if (!tag) return res.status(404).json({ success: false, message: 'Not found' });
     res.json({ data: tag });
   } catch (err: any) {
@@ -38,9 +38,9 @@ router.get('/:id', async (req: Request, res: Response) => {
 });
 
 // POST / — Create new tag
-router.post('/', async (req: Request, res: Response) => {
+router.post('/', (req: Request, res: Response) => {
   try {
-    const tag = await tagManager.createTag(req.body);
+    const tag = tagManager.createTag(req.body);
     console.log(`📊 Tag "${tag.name}" created (${tag.address})`);
     res.status(201).json({ data: tag });
   } catch (err: any) {
@@ -49,9 +49,9 @@ router.post('/', async (req: Request, res: Response) => {
 });
 
 // PUT /:id — Update tag
-router.put('/:id', async (req: Request, res: Response) => {
+router.put('/:id', (req: Request, res: Response) => {
   try {
-    const tag = await tagManager.updateTag(parseInt(req.params.id), req.body);
+    const tag = tagManager.updateTag(parseInt(req.params.id), req.body);
     res.json({ data: tag });
   } catch (err: any) {
     res.status(500).json({ success: false, message: err.message });
@@ -59,9 +59,9 @@ router.put('/:id', async (req: Request, res: Response) => {
 });
 
 // DELETE /:id — Delete tag
-router.delete('/:id', async (req: Request, res: Response) => {
+router.delete('/:id', (req: Request, res: Response) => {
   try {
-    await tagManager.deleteTag(parseInt(req.params.id));
+    tagManager.deleteTag(parseInt(req.params.id));
     res.json({ success: true });
   } catch (err: any) {
     res.status(500).json({ success: false, message: err.message });
